@@ -98,3 +98,16 @@ Mention both projects or directories in your prompt. The orchestrator will estab
 
 * **MCP Servers:** Edit `~/.gemini/config/mcp_config.json` (or update the script before running) to add or modify MCP tools such as database, GitHub, or browser servers.
 * **Agent Rules:** Modify the Markdown files inside `~/.gemini/config/agents/` to adjust model tiers (`pro` / `flash`), tool permissions, or strict boundary instructions.
+
+---
+
+## Troubleshooting & Best Practices
+
+### Preventing "An error occurred while handling your request. Please try again."
+* **Cause**: In Antigravity, when an orchestrator invokes subagents and yields the turn without emitting any text output (`content: ""`), the API gateway flags the empty payload as a request failure.
+* **Solution**: The orchestrator skill is configured to always emit a single-line progress update (e.g., `[Phase 1] Dispatched ui-designer...`) before awaiting subagent responses.
+* **User Rules**: Ensure your global user rules do not completely suppress status updates during subagent delegation.
+
+### Preventing Session Timeouts on Heavy Codebases
+* **Context Compaction**: Run `/compact` periodically in active sessions to avoid large token context overhead that can delay subagent spawns.
+* **Direct Execution**: For minor, localized single-file fixes, consider direct prompting without `/orchestrator` to execute in a single fast turn.

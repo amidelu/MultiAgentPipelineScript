@@ -9,23 +9,23 @@ SKILLS_DIR="$CONFIG_DIR/skills/orchestrator"
 mkdir -p "$AGENTS_DIR" "$SKILLS_DIR"
 
 # 1. Configure Global MCP Servers (Dart + Stitch API)
-cat << 'EOF' > "$CONFIG_DIR/mcp_config.json"
-{
-  "mcpServers": {
-    "dart": {
-      "command": "dart",
-      "args": ["mcp-server"]
-    },
-    "stitch": {
-      "command": "npx",
-      "args": ["-y", "@stitch/mcp-server"],
-      "env": {
-        "STITCH_API_KEY": "${STITCH_API_KEY}"
-      }
-    }
-  }
-}
-EOF
+# cat << 'EOF' > "$CONFIG_DIR/mcp_config.json"
+# {
+#   "mcpServers": {
+#     "dart": {
+#       "command": "dart",
+#       "args": ["mcp-server"]
+#     },
+#     "stitch": {
+#       "command": "npx",
+#       "args": ["-y", "@stitch/mcp-server"],
+#       "env": {
+#         "STITCH_API_KEY": "${STITCH_API_KEY}"
+#       }
+#     }
+#   }
+# }
+# EOF
 
 # 2. Agent 1: UI Designer (ui-designer)
 cat << 'EOF' > "$AGENTS_DIR/ui-designer.md"
@@ -156,6 +156,11 @@ description: Analyzes the user prompt and workspace structure to dynamically dis
 
 You are the **Orchestrator**. Never write or edit application code yourself.
 
+## Execution Rules & Gateway Keep-Alive
+1. **Always Emit Progress Updates**: Before calling `invoke_subagent` or `send_message`, and before ending your turn to wait for subagent completion, ALWAYS output a short, single-line status token (e.g., `[Phase 1/4] Dispatched ui-designer...`). NEVER leave an orchestration turn with an empty text response (`content: ""`), as empty payloads cause API gateway timeouts and trigger the frontend fallback: *"An error occurred while handling your request. Please try again."*
+2. **Concise Status Output**: Keep progress notifications to a single bullet or line to maintain clean execution logs while keeping the connection alive.
+3. **Handle Server Restarts**: If subagents are stopped due to container/server restarts, check subagent status with `manage_subagents` and resume or re-dispatch with the last verified task state.
+
 ## Phase 0: Analyze Prompt & Project Architecture
 1. **Understand Intent & Scope:** Parse the user's natural-language prompt to determine which project(s) or directories are involved (whether explicitly mentioned in the prompt or present in the workspace).
 2. **Inspect Workspace:** Read any `AGENTS.md` files and scan project roots to identify whether this task targets:
@@ -169,19 +174,24 @@ You are the **Orchestrator**. Never write or edit application code yourself.
 Pass the explicit project scope/folder boundary in every `invoke_subagent` call and enforce these phases in order:
 
 1. **UI Design Phase (Conditional):**
+   - Output progress: `[Phase 1] Dispatched ui-designer for UI/UX blueprint...`
    - Invoke `ui-designer` *only* if the target project has a UI layer and the prompt requires new screens, layouts, or visual changes.
 
 2. **Development Phase:**
+   - Output progress: `[Phase 2] Dispatched developer for implementation...`
    - Invoke `developer` with the task requirements, target scope, shared contracts (if multi-project), and any design output from Phase 1.
 
 3. **Verification Loop (`code-reviewer` + `security-auditor`):**
+   - Output progress: `[Phase 3] Running verification loop (code-reviewer + security-auditor)...`
    - Concurrently invoke `code-reviewer` and `security-auditor` on all modified files in that project scope.
    - **Gate Check:** If EITHER returns `STATUS: FAIL`:
+     - Output progress: `[Phase 3] Audit failed. Passing logs to developer for fixes...`
      - Pass the combined failure logs back to `developer` to fix.
      - Re-run `code-reviewer` and `security-auditor`.
      - Repeat this loop until BOTH return `STATUS: PASS`.
 
 4. **Testing Phase (`tester`):**
+   - Output progress: `[Phase 4] Verification passed. Dispatched tester for test execution...`
    - Once Phase 3 achieves a clean `STATUS: PASS`, invoke `tester` to write and execute unit, widget/component, and integration tests for that project scope.
    - If any test fails, send the failure logs back to `developer`, re-run Phase 3 verification, and re-run `tester` until all tests pass.
 
